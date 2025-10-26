@@ -44,7 +44,7 @@ client.on('disconnected', (reason) => {
 
 
 /**
- * Processa o registro de uma transação (entrada ou saida)
+ * Processa o registro de uma transação
  * * @param {Message} message - O objeto 'message' ORIGINAL do whatsapp-web.js
  * @param {string} text - O texto do comando a ser processado
  */
@@ -151,7 +151,6 @@ async function getFinancialSummary(message) {
         if (error.message.includes('ECONNREFUSED')) {
             errorMessage = 'Conexão recusada. O Spring Boot não está rodando no endereço especificado.';
         } else if (error.response && (error.response.status === 404 || error.response.status === 500)) {
-            // Este erro é comum se o Spring Boot não tiver os endpoints /entradas/total e /saidas/total implementados.
             errorMessage = 'O endpoint da API para resumo não foi encontrado ou houve erro no servidor. Verifique se o backend está implementado para os endpoints `/entradas/total` e `/saidas/total` ou se há algum problema interno.';
         } else if (error.response && error.response.status === 400) {
             errorMessage = 'Requisição inválida (400). Verifique se o ID de usuário está correto.';
@@ -208,17 +207,17 @@ CONECTAR SEU_ID_AQUI`
 
     if (bodyLower === 'menu' || bodyLower === 'ajuda') {
         await message.reply(
-`*Menu Principal*
-Digite o *número* da opção desejada:
+        `*Menu Principal*
+        Digite o *número* da opção desejada:
 
-1️⃣ - Registrar Entrada
-2️⃣ - Registrar Saída
-3️⃣ - Resumo Financeiro
-4️⃣ - Desconectar`
-        );
-        userSessionState[whatsappId] = 'in_menu';
-        return;
-    }
+        1️⃣ - Registrar Entrada
+        2️⃣ - Registrar Saída
+        3️⃣ - Resumo Financeiro
+        4️⃣ - Desconectar`
+                );
+                userSessionState[whatsappId] = 'in_menu';
+                return;
+            }
 
     if (session === 'in_menu') {
         switch (body) {
@@ -231,12 +230,10 @@ Digite o *número* da opção desejada:
                 await message.reply('Ok, vamos registrar uma *Saída*.\n\nPor favor, digite o *valor* e a *descrição*.\n(Ex: 45 almoço)');
                 return;
             case '3':
-                // IMPLEMENTAÇÃO DO RESUMO FINANCEIRO
                 userSessionState[whatsappId] = 'fetching_summary';
                 await message.reply('Buscando seu resumo financeiro... Aguarde um momento.');
                 const success = await getFinancialSummary(message);
                 
-                // Retorna ao menu principal após a operação
                 userSessionState[whatsappId] = 'in_menu';
                 await message.reply('O que deseja fazer agora? Digite *MENU* para ver as opções.');
                 return;
