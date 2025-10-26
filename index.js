@@ -243,7 +243,6 @@ async function getFinancialSummary(message) {
 
 /**
  * Busca e envia as transações detalhadas para o usuário.
- * Assumimos que GET para /api/entradas ou /api/saidas retorna uma lista.
  * @param {Message} message - O objeto 'message' ORIGINAL do whatsapp-web.js
  * @param {'entradas'|'saidas'} type - O tipo de transação a buscar.
  */
