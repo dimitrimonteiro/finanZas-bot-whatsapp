@@ -42,6 +42,46 @@ client.on('disconnected', (reason) => {
     client.initialize();
 });
 
+/**
+ * Envia o Menu Principal para o usuário.
+ * @param {Message} message - O objeto 'message' do whatsapp-web.js
+ */
+async function sendMainMenu(message) {
+    const whatsappId = message.from;
+    userSessionState[whatsappId] = 'in_menu';
+    await message.reply(
+`*Menu Principal*
+Digite o *número* da opção desejada:
+
+1️⃣ - Registrar Entrada
+2️⃣ - Registrar Saída
+3️⃣ - Resumo Financeiro
+4️⃣ - Desconectar`
+    );
+}
+
+/**
+ * Envia o Sub-Menu de Transação para o usuário.
+ * @param {Message} message - O objeto 'message' do whatsapp-web.js
+ * @param {'entrada'|'saida'} type - O tipo de transação ('entrada' ou 'saida').
+ */
+async function sendTransactionMenu(message, type) {
+    const whatsappId = message.from;
+    const isEntrada = type === 'entrada';
+    const typeLabel = isEntrada ? 'Entrada (Receita)' : 'Saída (Despesa)';
+    
+    userSessionState[whatsappId] = isEntrada ? 'awaiting_entrada_action' : 'awaiting_saida_action';
+    
+    await message.reply(
+`*Menu de ${typeLabel}*
+Digite o *número* da opção desejada:
+
+1️⃣ - Registrar nova ${isEntrada ? 'Entrada' : 'Saída'}
+2️⃣ - Ver últimos registros de ${typeLabel}
+3️⃣ - Voltar ao Menu Principal`
+    );
+}
+
 
 /**
  * Processa o registro de uma transação
@@ -161,6 +201,72 @@ async function getFinancialSummary(message) {
     }
 }
 
+/**
+ * Busca e envia as transações detalhadas para o usuário.
+ * Assumimos que GET para /api/entradas ou /api/saidas retorna uma lista.
+ * @param {Message} message - O objeto 'message' ORIGINAL do whatsapp-web.js
+ * @param {'entradas'|'saidas'} type - O tipo de transação a buscar.
+ */
+async function getDetailedTransactions(message, type) {
+    const whatsappId = message.from;
+    const userId = userMap[whatsappId];
+    const typeLabel = type === 'entradas' ? 'Entradas (Receitas)' : 'Saídas (Despesas)';
+    const endpoint = `/${type}`;
+
+    try {
+        const url = `${API_BASE_URL}${endpoint}?userId=${userId}&limit=5`; 
+        
+        const response = await axios.get(url);
+        const transactions = response.data;
+
+        if (!Array.isArray(transactions) || transactions.length === 0) {
+            await message.reply(`Você não tem ${typeLabel.toLowerCase()} registradas.`);
+            return true;
+        }
+
+        const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+        let detailedMessage = `*📋 Últimas ${transactions.slice(0, 5).length} ${typeLabel}*:\n\n`;
+
+        transactions.slice(0, 5).forEach((t, index) => {
+            const valor = formatCurrency(t.valor);
+            const data = t.data ? new Date(t.data).toLocaleDateString('pt-BR') : 'N/A';
+            const descricao = t.descricao || 'Sem descrição';
+            
+            detailedMessage += `*${index + 1}. ${descricao}*\n`;
+            detailedMessage += `  - Valor: ${valor}\n`;
+            detailedMessage += `  - Data: ${data}\n`;
+            
+            if (type === 'entradas') {
+                const salario = t.salario ? 'Sim' : 'Não';
+                detailedMessage += `  - Salário/Fixo: ${salario}\n`;
+            } else {
+                const tipo = t.tipo || 'Variável';
+                detailedMessage += `  - Tipo: ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}\n`;
+            }
+            detailedMessage += '---------------------\n';
+        });
+
+        await message.reply(detailedMessage);
+        return true;
+
+    } catch (error) {
+        console.error(`Erro ao buscar ${type} detalhadas no Spring Boot:`, error.response ? error.response.data : error.message);
+
+        let errorMessage = `Erro desconhecido ao buscar ${typeLabel.toLowerCase()}.`;
+        if (error.message.includes('ECONNREFUSED')) {
+            errorMessage = 'Conexão recusada. O Spring Boot não está rodando no endereço especificado.';
+        } else if (error.response && error.response.status === 404) {
+            errorMessage = 'O endpoint da API para detalhes não foi encontrado (404). Verifique a implementação de GET para `/api/{entradas|saidas}`.';
+        } else if (error.response && error.response.status === 400) {
+            errorMessage = 'Requisição inválida (400). Verifique se o ID de usuário está correto.';
+        }
+        
+        message.reply(`❌ Ocorreu um erro: ${errorMessage}`);
+        return false;
+    }
+}
+
 
 client.on('message', async message => {
     const whatsappId = message.from;
@@ -206,36 +312,26 @@ CONECTAR SEU_ID_AQUI`
     }
 
     if (bodyLower === 'menu' || bodyLower === 'ajuda') {
-        await message.reply(
-        `*Menu Principal*
-        Digite o *número* da opção desejada:
-
-        1️⃣ - Registrar Entrada
-        2️⃣ - Registrar Saída
-        3️⃣ - Resumo Financeiro
-        4️⃣ - Desconectar`
-                );
-                userSessionState[whatsappId] = 'in_menu';
-                return;
-            }
+        await sendMainMenu(message);
+        return;
+    }
 
     if (session === 'in_menu') {
         switch (body) {
             case '1':
-                userSessionState[whatsappId] = 'awaiting_entrada';
-                await message.reply('Ok, vamos registrar uma *Entrada*.\n\nPor favor, digite o *valor* e a *descrição*.\n(Ex: 2000 salário)');
+                await sendTransactionMenu(message, 'entrada');
                 return;
             case '2':
-                userSessionState[whatsappId] = 'awaiting_saida';
-                await message.reply('Ok, vamos registrar uma *Saída*.\n\nPor favor, digite o *valor* e a *descrição*.\n(Ex: 45 almoço)');
+                await sendTransactionMenu(message, 'saida');
                 return;
             case '3':
                 userSessionState[whatsappId] = 'fetching_summary';
                 await message.reply('Buscando seu resumo financeiro... Aguarde um momento.');
                 const success = await getFinancialSummary(message);
                 
-                userSessionState[whatsappId] = 'in_menu';
-                await message.reply('O que deseja fazer agora? Digite *MENU* para ver as opções.');
+                if (success) {
+                    await sendMainMenu(message);
+                }
                 return;
             case '4':
                 delete userMap[whatsappId];
@@ -248,14 +344,40 @@ CONECTAR SEU_ID_AQUI`
         }
     }
 
+    if (session === 'awaiting_entrada_action' || session === 'awaiting_saida_action') {
+        const type = session === 'awaiting_entrada_action' ? 'entrada' : 'saida';
+        const isEntrada = type === 'entrada';
+        
+        switch (body) {
+            case '1':
+                userSessionState[whatsappId] = isEntrada ? 'awaiting_entrada' : 'awaiting_saida';
+                await message.reply(`Ok, vamos registrar uma *${isEntrada ? 'Entrada' : 'Saída'}*.\n\nPor favor, digite o *valor* e a *descrição*.\n(Ex: ${isEntrada ? '2000 salário' : '45 almoço'})`);
+                return;
+            case '2':
+                userSessionState[whatsappId] = 'fetching_details';
+                await message.reply('Buscando seus registros detalhados... Aguarde um momento.');
+                await getDetailedTransactions(message, isEntrada ? 'entradas' : 'saidas');
+                
+                await sendTransactionMenu(message, type);
+                return;
+            case '3':
+                await sendMainMenu(message);
+                return;
+            default:
+                await message.reply('Opção inválida. Por favor, digite *1*, *2* ou *3*.');
+                return;
+        }
+    }
+
     if (session === 'awaiting_entrada') {
         const textToProcess = 'entrada ' + body;
 
         const success = await processTransaction(message, textToProcess);
 
         if (success) {
-            userSessionState[whatsappId] = 'in_menu';
-            await message.reply('O que deseja fazer agora? Digite *MENU* para ver as opções.');
+            await sendTransactionMenu(message, 'entrada'); 
+        } else {
+            userSessionState[whatsappId] = 'awaiting_entrada';
         }
         
         return;
@@ -266,8 +388,9 @@ CONECTAR SEU_ID_AQUI`
         const success = await processTransaction(message, textToProcess);
 
         if (success) {
-            userSessionState[whatsappId] = 'in_menu'; 
-            await message.reply('O que deseja fazer agora? Digite *MENU* para ver as opções.');
+            await sendTransactionMenu(message, 'saida'); 
+        } else {
+            userSessionState[whatsappId] = 'awaiting_saida';
         }
         return;
     }
