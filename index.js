@@ -6,7 +6,7 @@ const axios = require("axios");
 const app = express();
 const PORT = 3000;
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = "https://finanzas-backend-rmik.onrender.com/api";
 
 const userMap = {};
 
