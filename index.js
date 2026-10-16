@@ -3,9 +3,9 @@ const qrcode = require("qrcode-terminal");
 const axios = require("axios");
 
 const API_BASE_URL =
-    process.env.API_BASE_URL || "https://finanzas-backend-rmik.onrender.com/api";
+    process.env.API_BASE_URL || "http://localhost:8080/api";
 const BOT_API_KEY = process.env.BOT_API_KEY;
-const SITE_URL = process.env.SITE_URL || "https://finanzas.dev.br";
+const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 
 if (!BOT_API_KEY) {
     console.error("❌ Defina a variável de ambiente BOT_API_KEY antes de iniciar o bot.");
@@ -50,7 +50,6 @@ client.on("disconnected", (reason) => {
 const formatCurrency = (value) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
-/** Verifica no backend se o número está vinculado a uma conta. */
 async function verificarVinculo(whatsappId) {
     if (vinculados.has(whatsappId)) return true;
     try {
@@ -65,7 +64,6 @@ async function verificarVinculo(whatsappId) {
     }
 }
 
-/** Se o usuário desconectou pelo site, avisa e limpa o estado local. */
 async function tratarDesvinculo(error, message) {
     if (error.response?.status === 401 && error.response.data?.erro === "nao_vinculado") {
         vinculados.delete(message.from);
@@ -109,7 +107,6 @@ Digite o *número* da opção desejada:
     );
 }
 
-/** CONECTAR CÓDIGO: vincula este número à conta que gerou o código no site. */
 async function conectar(message, body) {
     const whatsappId = message.from;
     const codigo = body
@@ -142,7 +139,6 @@ async function conectar(message, body) {
     }
 }
 
-/** Registra uma transação. */
 async function processTransaction(message, text) {
     const whatsappId = message.from;
 
@@ -211,7 +207,6 @@ async function processTransaction(message, text) {
     }
 }
 
-/** Resumo financeiro (totais). */
 async function getFinancialSummary(message) {
     const whatsappId = message.from;
     const headers = apiHeaders(whatsappId);
@@ -244,7 +239,6 @@ async function getFinancialSummary(message) {
     }
 }
 
-/** Últimos registros. */
 async function getDetailedTransactions(message, type) {
     const whatsappId = message.from;
     const typeLabel = type === "entradas" ? "Entradas (Receitas)" : "Saídas (Despesas)";
